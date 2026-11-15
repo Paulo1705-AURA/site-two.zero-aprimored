@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mundo de Blocos 2 – Cavernas e Missões</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; font-family: system-ui, sans-serif; color: #fff; }
+  canvas { display: block; }
+  #cruz { position: fixed; left: 50%; top: 50%; width: 20px; height: 20px; transform: translate(-50%, -50%); pointer-events: none; }
+  #cruz::before, #cruz::after { content: ""; position: absolute; background: rgba(255,255,255,.9); mix-blend-mode: difference; }
+  #cruz::before { left: 9px; top: 0; width: 2px; height: 20px; }
+  #cruz::after { top: 9px; left: 0; height: 2px; width: 20px; }
+  #progWrap { position: fixed; left: 50%; top: calc(50% + 24px); width: 80px; height: 6px; transform: translateX(-50%); background: rgba(0,0,0,.5); border-radius: 3px; overflow: hidden; display: none; }
+  #prog { height: 100%; width: 0; background: #ffd54f; }
+
+  #missoes { position: fixed; top: 10px; left: 10px; width: 290px; background: rgba(0,0,0,.55); padding: 10px 12px; border-radius: 10px; font-size: 13px; line-height: 1.45; }
+  #missoes h3 { margin: 0 0 6px; font-size: 14px; color: #ffd54f; }
+  #missoes .m { color: #9aa3b2; }
+  #missoes .m.ok { color: #7bd88f; text-decoration: line-through; }
+  #missoes .m.atual { color: #fff; font-weight: 700; }
+  #missoes .m.atual small { color: #ffd54f; font-weight: 600; }
+
+  #aviso { position: fixed; top: 14%; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.65); padding: 10px 22px; border-radius: 999px; font-weight: 700; opacity: 0; transition: opacity .3s; pointer-events: none; white-space: nowrap; }
+  #boss { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); width: 340px; display: none; text-align: center; font-weight: 700; text-shadow: 1px 1px 2px #000; }
+  #boss .bar { height: 14px; background: rgba(0,0,0,.6); border: 2px solid #fff; border-radius: 8px; overflow: hidden; margin-top: 4px; }
+  #boss .bar div { height: 100%; width: 100%; background: #e53935; }
+
+  #status { position: fixed; bottom: 16px; left: 14px; font-size: 13px; background: rgba(0,0,0,.5); padding: 8px 12px; border-radius: 10px; min-width: 190px; }
+  #vidaBar { height: 12px; background: rgba(255,255,255,.2); border-radius: 6px; overflow: hidden; margin: 4px 0 6px; }
+  #vidaBar div { height: 100%; width: 100%; background: #e53935; transition: width .15s; }
+
+  #hotbar { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; padding: 6px; background: rgba(0,0,0,.45); border-radius: 8px; }
+  .slot { width: 52px; height: 52px; border: 3px solid #555; border-radius: 4px; position: relative; background-size: cover; image-rendering: pixelated; }
+  .slot.sel { border-color: #fff; transform: translateY(-4px); }
+  .slot .k { position: absolute; top: 1px; left: 4px; font-size: 11px; text-shadow: 1px 1px 2px #000; }
+  .slot .n { position: absolute; bottom: 1px; right: 4px; font-size: 13px; font-weight: 700; text-shadow: 1px 1px 2px #000; }
+  .slot.vazio { opacity: .45; }
+
+  #dano { position: fixed; inset: 0; background: radial-gradient(transparent 40%, rgba(220,0,0,.75)); opacity: 0; pointer-events: none; transition: opacity .25s; }
+
+  .overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,.6); text-align: center; gap: 10px; }
+  #menu { cursor: pointer; }
+  #menu h1, #vitoria h1 { font-size: 2.4rem; margin: 0; }
+  #menu p, #vitoria p { color: #dfe6f0; line-height: 1.7; margin: 4px 0; }
+  #vitoria { display: none; background: rgba(0,0,0,.8); }
+  kbd { background: #333; border-radius: 4px; padding: 2px 7px; border: 1px solid #777; }
+  button { background: #ff7a1a; color: #fff; border: none; padding: 10px 22px; border-radius: 999px; font: inherit; font-weight: 700; cursor: pointer; }
+
+  #painel { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(720px, 94vw); max-height: 86vh; overflow: auto; background: rgba(20,24,34,.96); border: 2px solid #556; border-radius: 14px; padding: 18px 20px; display: none; }
+  #painel h2 { margin: 0 0 10px; }
+  #painel h3 { margin: 12px 0 6px; color: #ffd54f; font-size: 14px; }
+  #painel .cols { display: grid; grid-template-columns: 1fr 1.6fr; gap: 20px; }
+  #painel .rec { display: block; width: 100%; text-align: left; background: #2b3550; border-radius: 8px; margin-bottom: 6px; padding: 8px 12px; }
+  #painel .rec:disabled { opacity: .4; cursor: not-allowed; }
+  #painel .rec small { color: #c8d0e0; font-weight: 400; }
+  @media (max-width: 600px) { #painel .cols { grid-template-columns: 1fr; } #missoes { width: 200px; font-size: 11px; } }
+</style>
+</head>
+<body>
+<div id="cruz"></div>
+<div id="progWrap"><div id="prog"></div></div>
+<div id="missoes"></div>
+<div id="aviso"></div>
+<div id="boss"><span>👑 Rei Gosma</span><div class="bar"><div></div></div></div>
+<div id="status">
+  <div>❤ <span id="vidaTxt">20/20</span></div>
+  <div id="vidaBar"><div></div></div>
+  <div id="equip"></div>
+</div>
+<div id="hotbar"></div>
+<div id="dano"></div>
+
+<div id="painel"></div>
+
+<div id="menu" class="overlay">
+  <h1>⛏️ Mundo de Blocos 2</h1>
+  <p><b>Cavernas, minérios, monstros e missões.</b> Cumpra todas as missões e derrote o Rei Gosma para zerar o jogo!</p>
+  <p>Clique para jogar</p>
+  <p>
+    <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> andar · <kbd>Espaço</kbd> pular · <kbd>Shift</kbd> correr<br>
+    <b>Segurar clique esquerdo</b>: minerar / atacar · <b>Clique direito</b>: colocar bloco<br>
+    <kbd>E</kbd> mochila e fabricação · <kbd>1</kbd>–<kbd>4</kbd> blocos · <kbd>H</kbd> usar poção · <kbd>Esc</kbd> pausa
+  </p>
+</div>
+
+<div id="vitoria" class="overlay">
+  <h1>🏆 Você zerou o jogo!</h1>
+  <p id="vitTxt"></p>
+  <button onclick="location.reload()">Jogar de novo</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const rnd = (a, b) => a + Math.random() * (b - a);
+
+// =====================================================
+// BLOCOS E TEXTURAS
+// =====================================================
+const BLOCOS = [
+  null,
+  { nome: 'Grama',   base: [88, 150, 60],   var: 40, dureza: .6,  drop: 'terra' },
+  { nome: 'Terra',   base: [125, 88, 56],   var: 34, dureza: .5,  drop: 'terra' },
+  { nome: 'Pedra',   base: [125, 125, 128], var: 30, tipo: 'pedra', dureza: 1.6, tier: 1, drop: 'pedra' },
+  { nome: 'Tronco',  base: [110, 78, 44],   var: 20, tipo: 'tronco', dureza: .9, drop: 'tronco' },
+  { nome: 'Folhas',  base: [50, 125, 45],   var: 55, dureza: .15, drop: null },
+  { nome: 'Carvão',  base: [125, 125, 128], var: 30, tipo: 'pedra', pinta: [28, 28, 30],   dureza: 2,   tier: 1, drop: 'carvao' },
+  { nome: 'Ferro',   base: [125, 125, 128], var: 30, tipo: 'pedra', pinta: [216, 168, 130], dureza: 2.8, tier: 2, drop: 'ferroMin' },
+  { nome: 'Ouro',    base: [125, 125, 128], var: 30, tipo: 'pedra', pinta: [250, 210, 50],  dureza: 3,   tier: 3, drop: 'ouroMin' },
+  { nome: 'Diamante',base: [125, 125, 128], var: 30, tipo: 'pedra', pinta: [90, 235, 230],  dureza: 3.5, tier: 3, drop: 'diamante' },
+  { nome: 'Tábua',   base: [176, 138, 84],  var: 18, tipo: 'tabua', dureza: .8, drop: 'tabua' },
+  { nome: 'Base',    base: [40, 40, 46],    var: 14, dureza: Infinity, drop: null }
+];
+function criarTextura(b) {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 16;
+  const g = cv.getContext('2d');
+  const cor = (c, v, k = 1) => `rgb(${clamp(c[0] * k + v, 0, 255)},${clamp(c[1] * k + v, 0, 255)},${clamp(c[2] * k + v, 0, 255)})`;
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    const v = (Math.random() - 0.5) * b.var;
+    let k = 1;
+    if (b.tipo === 'tabua' && y % 4 === 3) k = .7;
+    if (b.tipo === 'pedra' && Math.random() < .08) k = .75;
+    if (b.tipo === 'tronco' && x % 4 === 0) k = .72;
+    g.fillStyle = cor(b.base, v, k);
+    g.fillRect(x, y, 1, 1);
+  }
+  if (b.pinta) for (let i = 0; i < 7; i++) {
+    const x = Math.floor(rnd(1, 14)), y = Math.floor(rnd(1, 14));
+    g.fillStyle = cor(b.pinta, (Math.random() - .5) * 24);
+    g.fillRect(x, y, 2, 2);
+  }
+  return cv;
+}
+BLOCOS.forEach(b => {
+  if (!b) return;
+  b.canvas = criarTextura(b);
+  b.tex = new THREE.CanvasTexture(b.canvas);
+  b.tex.magFilter = THREE.NearestFilter;
+  b.tex.minFilter = THREE.NearestFilter;
+});
+
+// =====================================================
+// ITENS, EQUIPAMENTOS, RECEITAS
+// =====================================================
+const NOMES = {
+  tronco: 'Tronco', tabua: 'Tábua', terra: 'Terra', pedra: 'Pedra', carvao: 'Carvão',
+  ferroMin: 'Minério de ferro', ouroMin: 'Minério de ouro', diamante: 'Diamante',
+  ferro: 'Lingote de ferro', pocao: 'Poção de cura'
+};
+const inv = {};
+const stats = { tronco: 0, pedra: 0, carvao: 0, ferroMin: 0, ouroMin: 0, diamante: 0, kills: 0, boss: 0 };
+const crafted = {};
+const TN = ['Mão', 'Madeira', 'Pedra', 'Ferro', 'Diamante'];
+const AN = ['Nenhuma', 'Ferro', 'Diamante'];
+const PICK_MULT = [1, 2, 3.2, 5, 8];
+const DANO = [1, 2, 3, 5, 7];
+const REDUCAO = [0, .35, .6];
+let pickTier = 0, swordTier = 0, armorTier = 0;
+
+const RECEITAS = [
+  { id: 'tabuas', nome: 'Tábuas (x4)', custo: { tronco: 1 }, da: { tabua: 4 } },
+  { id: 'picM', nome: 'Picareta de madeira', custo: { tabua: 5 }, eq: { tipo: 'pick', tier: 1 } },
+  { id: 'espM', nome: 'Espada de madeira', custo: { tabua: 3 }, eq: { tipo: 'sword', tier: 1 } },
+  { id: 'picP', nome: 'Picareta de pedra', custo: { tabua: 2, pedra: 3 }, eq: { tipo: 'pick', tier: 2 } },
+  { id: 'espP', nome: 'Espada de pedra', custo: { tabua: 1, pedra: 2 }, eq: { tipo: 'sword', tier: 2 } },
+  { id: 'lingote', nome: 'Lingote de ferro (fundir)', custo: { ferroMin: 1, carvao: 1 }, da: { ferro: 1 } },
+  { id: 'picF', nome: 'Picareta de ferro', custo: { ferro: 3, tabua: 2 }, eq: { tipo: 'pick', tier: 3 } },
+  { id: 'espF', nome: 'Espada de ferro', custo: { ferro: 2, tabua: 1 }, eq: { tipo: 'sword', tier: 3 } },
+  { id: 'armF', nome: 'Armadura de ferro', custo: { ferro: 4 }, eq: { tipo: 'armor', tier: 1 } },
+  { id: 'picD', nome: 'Picareta de diamante', custo: { diamante: 3, tabua: 2 }, eq: { tipo: 'pick', tier: 4 } },
+  { id: 'espD', nome: 'Espada de diamante', custo: { diamante: 2, tabua: 1 }, eq: { tipo: 'sword', tier: 4 } },
+  { id: 'armD', nome: 'Armadura de diamante', custo: { diamante: 5 }, eq: { tipo: 'armor', tier: 2 } },
+  { id: 'pocao', nome: 'Poção de cura', custo: { ouroMin: 2, carvao: 1 }, da: { pocao: 1 } }
+];
+const tierAtual = t => t === 'pick' ? pickTier : t === 'sword' ? swordTier : armorTier;
+const tem = (k, n) => (inv[k] || 0) >= n;
+function podeFabricar(r) {
+  for (const k in r.custo) if (!tem(k, r.custo[k])) return false;
+  if (r.eq && r.eq.tier <= tierAtual(r.eq.tipo)) return false;
+  return true;
+}
+function fabricar(id) {
+  const r = RECEITAS.find(x => x.id === id);
+  if (!r || !podeFabricar(r)) return;
+  for (const k in r.custo) inv[k] -= r.custo[k];
+  if (r.da) for (const k in r.da) inv[k] = (inv[k] || 0) + r.da[k];
+  if (r.eq) {
+    if (r.eq.tipo === 'pick') pickTier = r.eq.tier;
+    if (r.eq.tipo === 'sword') swordTier = r.eq.tier;
+    if (r.eq.tipo === 'armor') armorTier = r.eq.tier;
+  }
+  crafted[id] = true;
+  aviso('Fabricado: ' + r.nome);
+  atualizarUI();
+  checarMissoes();
+}
+const custoTxt = r => Object.keys(r.custo).map(k => `${r.custo[k]}× ${NOMES[k]}`).join(' + ');
+
+// =====================================================
+// MISSÕES
+// =====================================================
+const MISSOES = [
+  { t: 'Corte 5 troncos de árvore', f: () => stats.tronco, n: 5 },
+  { t: 'Fabrique uma Picareta de madeira (tecla E)', f: () => crafted.picM ? 1 : 0, n: 1 },
+  { t: 'Colete 8 pedras', f: () => stats.pedra, n: 8 },
+  { t: 'Fabrique uma Picareta de pedra', f: () => crafted.picP ? 1 : 0, n: 1 },
+  { t: 'Ache uma caverna e colete 4 carvões', f: () => stats.carvao, n: 4 },
+  { t: 'Minere 4 minérios de ferro', f: () => stats.ferroMin, n: 4 },
+  { t: 'Funda lingotes e fabrique a Picareta de ferro', f: () => crafted.picF ? 1 : 0, n: 1 },
+  { t: 'Fabrique a Espada e a Armadura de ferro', f: () => (crafted.espF ? 1 : 0) + (crafted.armF ? 1 : 0), n: 2 },
+  { t: 'Derrote 8 monstros', f: () => stats.kills, n: 8 },
+  { t: 'Minere 3 diamantes (camadas fundas)', f: () => stats.diamante, n: 3 },
+  { t: 'Derrote o Rei Gosma!', f: () => stats.boss, n: 1 }
+];
+let mi = 0, venceu = false;
+function checarMissoes() {
+  while (mi < MISSOES.length && MISSOES[mi].f() >= MISSOES[mi].n) {
+    aviso('✅ Missão cumprida: ' + MISSOES[mi].t, 3000);
+    mi++;
+    if (mi === MISSOES.length - 1) { invocarBoss(); }
+  }
+  if (mi >= MISSOES.length && !venceu) vitoria();
+  atualizarMissoes();
+}
+function atualizarMissoes() {
+  let h = '<h3>📜 Missões</h3>';
+  MISSOES.forEach((m, i) => {
+    const cls = i < mi ? 'ok' : i === mi ? 'atual' : '';
+    const prog = i === mi ? ` <small>(${Math.min(m.f(), m.n)}/${m.n})</small>` : '';
+    h += `<div class="m ${cls}">${i < mi ? '✔' : i + 1 + '.'} ${m.t}${prog}</div>`;
+  });
+  document.getElementById('missoes').innerHTML = h;
+}
+function vitoria() {
+  venceu = true;
+  document.exitPointerLock();
+  const s = Math.floor(tempoJogo), mm = Math.floor(s / 60), ss = String(s % 60).padStart(2, '0');
+  document.getElementById('vitTxt').textContent = `Todas as missões cumpridas e o Rei Gosma derrotado! Tempo: ${mm}:${ss}`;
+  document.getElementById('vitoria').style.display = 'flex';
+  document.getElementById('menu').style.display = 'none';
+}
+
+// =====================================================
+// AVISOS E UI
+// =====================================================
+const elAviso = document.getElementById('aviso');
+let avT = 0, ultAv = 0;
+function aviso(t, ms = 2500) {
+  elAviso.textContent = t; elAviso.style.opacity = 1;
+  clearTimeout(avT); avT = setTimeout(() => elAviso.style.opacity = 0, ms);
+}
+function avisoRaro(t) { const n = performance.now(); if (n - ultAv > 1500) { ultAv = n; aviso(t, 1400); } }
+
+const HOT = ['terra', 'pedra', 'tabua', 'tronco'];
+const ITEM_BLOCO = { terra: 2, pedra: 3, tabua: 10, tronco: 4 };
+const hotbar = document.getElementById('hotbar');
+let selecionado = 1;
+HOT.forEach((it, i) => {
+  const d = document.createElement('div');
+  d.className = 'slot';
+  d.style.backgroundImage = `url(${BLOCOS[ITEM_BLOCO[it]].canvas.toDataURL()})`;
+  d.innerHTML = `<span class="k">${i + 1}</span><span class="n"></span>`;
+  d.title = NOMES[it];
+  d.onclick = () => selecionar(i + 1);
+  hotbar.appendChild(d);
+});
+function selecionar(n) { selecionado = ((n - 1 + HOT.length) % HOT.length) + 1; atualizarUI(); }
+
+const HPMAX = 20;
+let hp = HPMAX;
+function atualizarUI() {
+  [...hotbar.children].forEach((el, i) => {
+    el.classList.toggle('sel', i + 1 === selecionado);
+    const q = inv[HOT[i]] || 0;
+    el.querySelector('.n').textContent = q;
+    el.classList.toggle('vazio', q === 0);
+  });
+  document.getElementById('vidaTxt').textContent = Math.ceil(hp) + '/' + HPMAX;
+  document.querySelector('#vidaBar div').style.width = (hp / HPMAX * 100) + '%';
+  document.getElementById('equip').innerHTML =
+    `⛏ ${TN[pickTier]} · ⚔ ${TN[swordTier]} · 🛡 ${AN[armorTier]}` +
+    (inv.pocao ? `<br>🧪 Poções (H): ${inv.pocao}` : '');
+  atualizarMissoes();
+}
+
+// =====================================================
+// MUNDO
+// =====================================================
+const SX = 64, SY = 32, SZ = 64;
+const mundo = new Uint8Array(SX * SY * SZ);
+const terr = new Int16Array(SX * SZ);
+const I = (x, y, z) => x + SX * (z + SZ * y);
+const dentro = (x, y, z) => x >= 0 && x < SX && y >= 0 && y < SY && z >= 0 && z < SZ;
+function pegar(x, y, z) {
+  if (y < 0) return 11;
+  if (y >= SY) return 0;
+  if (x < 0 || x >= SX || z < 0 || z >= SZ) return 11;
+  return mundo[I(x, y, z)];
+}
+function altura(x, z) {
+  return Math.floor(14 + 3.5 * Math.sin(x * .12) + 3.5 * Math.cos(z * .1) + 2.5 * Math.sin((x + z) * .06));
+}
+// terreno
+for (let x = 0; x < SX; x++) for (let z = 0; z < SZ; z++) {
+  const h = altura(x, z);
+  terr[x + SX * z] = h;
+  for (let y = 0; y <= h; y++) mundo[I(x, y, z)] = y === 0 ? 11 : y === h ? 1 : (y > h - 4 ? 2 : 3);
+}
+// minérios (em veias)
+function veia(x, y, z, id, n) {
+  for (let i = 0; i < n; i++) {
+    if (dentro(x, y, z) && mundo[I(x, y, z)] === 3) mundo[I(x, y, z)] = id;
+    x += Math.floor(rnd(-1, 2)); y += Math.floor(rnd(-1, 2)); z += Math.floor(rnd(-1, 2));
+  }
+}
+for (let x = 0; x < SX; x++) for (let z = 0; z < SZ; z++) for (let y = 1; y < terr[x + SX * z] - 3; y++) {
+  if (mundo[I(x, y, z)] !== 3) continue;
+  const r = Math.random();
+  if (y <= 6 && r < .0016) veia(x, y, z, 9, 1 + Math.floor(rnd(0, 3)));
+  else if (y <= 9 && r < .0038) veia(x, y, z, 8, 1 + Math.floor(rnd(0, 3)));
+  else if (y <= 15 && r < .0083) veia(x, y, z, 7, 2 + Math.floor(rnd(0, 4)));
+  else if (r < .0183) veia(x, y, z, 6, 2 + Math.floor(rnd(0, 5)));
+}
+// cavernas
+function esfera(cx, cy, cz, r) {
+  const R = Math.ceil(r);
+  for (let dx = -R; dx <= R; dx++) for (let dy = -R; dy <= R; dy++) for (let dz = -R; dz <= R; dz++) {
+    if (dx * dx + dy * dy + dz * dz > r * r) continue;
+    const x = Math.floor(cx + dx), y = Math.floor(cy + dy), z = Math.floor(cz + dz);
+    if (!dentro(x, y, z) || y < 1 || x < 1 || z < 1 || x >= SX - 1 || z >= SZ - 1) continue;
+    const t = mundo[I(x, y, z)];
+    if (t && t !== 11) mundo[I(x, y, z)] = 0;
+  }
+}
+function verme(x, y, z, passos, rBase, incl0) {
+  let ang = rnd(0, 6.283), incl = incl0;
+  for (let i = 0; i < passos; i++) {
+    x += Math.cos(ang) * Math.cos(incl); z += Math.sin(ang) * Math.cos(incl); y += Math.sin(incl);
+    ang += rnd(-.35, .35); incl = clamp(incl + rnd(-.2, .2), -.7, .7);
+    if (y < 3) incl = Math.abs(incl);
+    esfera(x, y, z, rBase + Math.sin(i * .2) * .6);
+  }
+}
+for (let i = 0; i < 16; i++) verme(rnd(8, SX - 8), rnd(5, 12), rnd(8, SZ - 8), 90, 1.7, rnd(-.3, .3));
+for (let i = 0; i < 6; i++) {            // entradas pela superfície
+  const x = rnd(8, SX - 8), z = rnd(8, SZ - 8);
+  verme(x, terr[Math.floor(x) + SX * Math.floor(z)], z, 70, 1.8, -.5);
+}
+for (let i = 0; i < 4; i++) esfera(rnd(10, SX - 10), rnd(5, 9), rnd(10, SZ - 10), rnd(3.5, 5));  // salões
+// árvores
+for (let i = 0; i < 40; i++) {
+  const x = 3 + Math.floor(Math.random() * (SX - 6)), z = 3 + Math.floor(Math.random() * (SZ - 6));
+  const h = terr[x + SX * z];
+  if (mundo[I(x, h, z)] !== 1) continue;
+  for (let y = h + 1; y <= h + 4; y++) mundo[I(x, y, z)] = 4;
+  for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) for (let dy = 3; dy <= 5; dy++) {
+    if (Math.abs(dx) + Math.abs(dz) + (dy === 5 ? 2 : 0) > 3) continue;
+    const yy = h + dy;
+    if (yy < SY && !mundo[I(x + dx, yy, z + dz)]) mundo[I(x + dx, yy, z + dz)] = 5;
+  }
+}
+
+// =====================================================
+// THREE.JS
+// =====================================================
+const renderer = new THREE.WebGLRenderer({ antialias: false });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+const cena = new THREE.Scene();
+cena.background = new THREE.Color(0x87ceeb);
+cena.fog = new THREE.Fog(0x87ceeb, 25, 60);
+const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.05, 100);
+camera.rotation.order = 'YXZ';
+cena.add(camera);
+const ambiente = new THREE.AmbientLight(0xffffff, 0.7);
+cena.add(ambiente);
+const sol = new THREE.DirectionalLight(0xffffff, 0.6);
+sol.position.set(30, 50, 20);
+cena.add(sol);
+const tocha = new THREE.PointLight(0xffd9a0, 0, 16);
+cena.add(tocha);
+
+const geo = new THREE.BoxGeometry(1, 1, 1);
+const CAP = [0, 40000, 40000, 110000, 20000, 20000, 20000, 20000, 20000, 20000, 20000, 20000];
+const malhas = [null];
+for (let t = 1; t < BLOCOS.length; t++) {
+  const m = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ map: BLOCOS[t].tex }), CAP[t]);
+  m.frustumCulled = false; m.count = 0;
+  cena.add(m); malhas[t] = m;
+}
+const mat4 = new THREE.Matrix4();
+function reconstruir() {
+  const cont = new Array(BLOCOS.length).fill(0);
+  for (let y = 0; y < SY; y++) for (let z = 0; z < SZ; z++) for (let x = 0; x < SX; x++) {
+    const t = mundo[I(x, y, z)];
+    if (!t) continue;
+    if (pegar(x + 1, y, z) && pegar(x - 1, y, z) && pegar(x, y + 1, z) &&
+        pegar(x, y - 1, z) && pegar(x, y, z + 1) && pegar(x, y, z - 1)) continue;
+    if (cont[t] >= CAP[t]) continue;
+    mat4.setPosition(x + .5, y + .5, z + .5);
+    malhas[t].setMatrixAt(cont[t]++, mat4);
+  }
+  for (let t = 1; t < BLOCOS.length; t++) {
+    malhas[t].count = cont[t];
+    malhas[t].instanceMatrix.needsUpdate = true;
+  }
+}
+reconstruir();
+
+const contorno = new THREE.LineSegments(
+  new THREE.EdgesGeometry(new THREE.BoxGeometry(1.005, 1.005, 1.005)),
+  new THREE.LineBasicMaterial({ color: 0x000000 })
+);
+contorno.visible = false;
+cena.add(contorno);
+
+// =====================================================
+// JOGADOR
+// =====================================================
+const LARG = 0.3, ALT = 1.8;
+function colide(px, py, pz, r = LARG, h = ALT) {
+  for (let x = Math.floor(px - r); x <= Math.floor(px + r); x++)
+    for (let y = Math.floor(py); y <= Math.floor(py + h); y++)
+      for (let z = Math.floor(pz - r); z <= Math.floor(pz + r); z++)
+        if (pegar(x, y, z)) return true;
+  return false;
+}
+function acharSpawn() {
+  for (let r = 0; r < 20; r++) for (let a = 0; a < 12; a++) {
+    const x = Math.floor(SX / 2 + Math.cos(a) * r), z = Math.floor(SZ / 2 + Math.sin(a) * r);
+    const h = terr[x + SX * z];
+    if (mundo[I(x, h, z)] === 1 && !pegar(x, h + 1, z) && !pegar(x, h + 2, z) && !pegar(x, h + 3, z)) return { x: x + .5, y: h + 1, z: z + .5 };
+  }
+  return { x: SX / 2 + .5, y: SY - 2, z: SZ / 2 + .5 };
+}
+const spawn = acharSpawn();
+const p = { x: spawn.x, y: spawn.y, z: spawn.z, vy: 0, chao: false, inv: 0, semDano: 0 };
+let yaw = 0, pitch = 0;
+const teclas = {};
+let esq = false;
+
+function mover(dt) {
+  const correr = teclas['ShiftLeft'] || teclas['ShiftRight'];
+  const vel = correr ? 7 : 4.5;
+  let fx = 0, fz = 0;
+  if (teclas['KeyW']) fz -= 1;
+  if (teclas['KeyS']) fz += 1;
+  if (teclas['KeyA']) fx -= 1;
+  if (teclas['KeyD']) fx += 1;
+  const len = Math.hypot(fx, fz) || 1;
+  fx /= len; fz /= len;
+  const dx = (fx * Math.cos(yaw) + fz * Math.sin(yaw)) * vel;
+  const dz = (-fx * Math.sin(yaw) + fz * Math.cos(yaw)) * vel;
+
+  p.vy -= 25 * dt;
+  if (teclas['Space'] && p.chao) { p.vy = 8; p.chao = false; }
+
+  const nx = p.x + dx * dt;
+  if (!colide(nx, p.y, p.z)) p.x = nx;
+  const nz = p.z + dz * dt;
+  if (!colide(p.x, p.y, nz)) p.z = nz;
+  const ny = p.y + p.vy * dt;
+  if (!colide(p.x, ny, p.z)) { p.y = ny; p.chao = false; }
+  else { if (p.vy < 0) p.chao = true; p.vy = 0; }
+
+  if (p.y < -10) reaparecer();
+}
+function reaparecer() {
+  p.x = spawn.x; p.y = spawn.y; p.z = spawn.z; p.vy = 0; p.inv = 3;
+}
+function danoJogador(d) {
+  if (p.inv > 0 || venceu) return;
+  hp -= d * (1 - REDUCAO[armorTier]);
+  p.semDano = 0;
+  const el = document.getElementById('dano');
+  el.style.opacity = 1; setTimeout(() => el.style.opacity = 0, 200);
+  if (hp <= 0) {
+    hp = HPMAX; reaparecer();
+    aviso('💀 Você caiu! Voltando ao ponto inicial', 3000);
+  }
+  atualizarUI();
+}
+
+// =====================================================
+// MIRA, MINERAÇÃO, ATAQUE
+// =====================================================
+let alvo = null, alvoMob = null;
+const dirCam = new THREE.Vector3();
+function mirar() {
+  dirCam.set(0, 0, -1).applyEuler(camera.rotation);
+  const o = camera.position;
+  let ant = null;
+  alvo = null; contorno.visible = false;
+  for (let d = 0; d < 5.5; d += 0.03) {
+    const x = Math.floor(o.x + dirCam.x * d), y = Math.floor(o.y + dirCam.y * d), z = Math.floor(o.z + dirCam.z * d);
+    if (pegar(x, y, z)) {
+      if (!dentro(x, y, z)) break;
+      alvo = { x, y, z, ant, d };
+      contorno.position.set(x + .5, y + .5, z + .5);
+      contorno.visible = true;
+      break;
+    }
+    ant = { x, y, z };
+  }
+  // monstros
+  alvoMob = null;
+  let melhor = 4.2;
+  for (const m of mobs) {
+    const vx = m.x - o.x, vy = m.y + m.c.h / 2 - o.y, vz = m.z - o.z;
+    const t = vx * dirCam.x + vy * dirCam.y + vz * dirCam.z;
+    if (t < 0 || t > melhor + (m.c.boss ? 1.2 : 0)) continue;
+    const px = vx - dirCam.x * t, py = vy - dirCam.y * t, pz = vz - dirCam.z * t;
+    const rad = Math.max(m.c.w, m.c.h) / 2 * .8 + .3;
+    if (Math.hypot(px, py, pz) < rad) { melhor = t; alvoMob = { m, t }; }
+  }
+}
+let prog = 0, progChave = '', atkCd = 0;
+const progWrap = document.getElementById('progWrap'), progBar = document.getElementById('prog');
+function acaoMouse(dt) {
+  atkCd -= dt;
+  const travado = !!document.pointerLockElement;
+  if (!esq || !travado) { prog = 0; progWrap.style.display = 'none'; return; }
+  if (alvoMob && (!alvo || alvoMob.t < alvo.d)) {
+    progWrap.style.display = 'none'; prog = 0;
+    if (atkCd <= 0) { atacar(alvoMob.m); atkCd = .45; }
+    return;
+  }
+  if (!alvo) { prog = 0; progWrap.style.display = 'none'; return; }
+  const id = mundo[I(alvo.x, alvo.y, alvo.z)], b = BLOCOS[id];
+  if (b.dureza === Infinity) { avisoRaro('Este bloco é indestrutível.'); return; }
+  if (pickTier < (b.tier || 0)) {
+    avisoRaro(`Precisa de picareta de ${TN[b.tier === 1 ? 1 : b.tier === 2 ? 2 : 3]} ou melhor!`);
+    prog = 0; progWrap.style.display = 'none'; return;
+  }
+  const chave = alvo.x + ',' + alvo.y + ',' + alvo.z;
+  if (chave !== progChave) { prog = 0; progChave = chave; }
+  prog += dt * PICK_MULT[pickTier] / b.dureza;
+  progWrap.style.display = 'block';
+  progBar.style.width = Math.min(prog, 1) * 100 + '%';
+  if (prog >= 1) { quebrar(alvo.x, alvo.y, alvo.z, id); prog = 0; progWrap.style.display = 'none'; }
+}
+function quebrar(x, y, z, id) {
+  const b = BLOCOS[id];
+  mundo[I(x, y, z)] = 0;
+  if (b.drop) {
+    inv[b.drop] = (inv[b.drop] || 0) + 1;
+    if (b.drop in stats) stats[b.drop]++;
+  }
+  reconstruir();
+  atualizarUI();
+  checarMissoes();
+}
+function colocar() {
+  if (!alvo || !alvo.ant) return;
+  const it = HOT[selecionado - 1];
+  if (!inv[it]) { avisoRaro('Você não tem esse bloco.'); return; }
+  const { x, y, z } = alvo.ant;
+  if (!dentro(x, y, z)) return;
+  mundo[I(x, y, z)] = ITEM_BLOCO[it];
+  if (colide(p.x, p.y, p.z)) { mundo[I(x, y, z)] = 0; return; }
+  inv[it]--;
+  reconstruir();
+  atualizarUI();
+}
+
+// =====================================================
+// MONSTROS
+// =====================================================
+const MOBS = {
+  gosma:  { nome: 'Gosma',  w: .9,  h: .8,  cor: 0x4caf50, olho: 0x111111, hp: 6,  vel: 2.3, dano: 2, salto: 7.5 },
+  sombra: { nome: 'Sombra', w: .6,  h: 1.6, cor: 0x4b2a7a, olho: 0xff3333, hp: 8,  vel: 3.4, dano: 3, salto: 8 },
+  rei:    { nome: 'Rei Gosma', w: 2.6, h: 2.4, cor: 0x2e7d32, olho: 0xffd600, hp: 90, vel: 2.4, dano: 5, salto: 9, boss: true }
+};
+const mobs = [];
+let bossVivo = null;
+function criarMob(tipo, x, y, z) {
+  const c = MOBS[tipo];
+  const g = new THREE.Group();
+  const mat = new THREE.MeshLambertMaterial({ color: c.cor });
+  const corpo = new THREE.Mesh(new THREE.BoxGeometry(c.w, c.h, c.w), mat);
+  corpo.position.y = c.h / 2; g.add(corpo);
+  const me = new THREE.MeshBasicMaterial({ color: c.olho });
+  const es = c.w * .16;
+  for (const s of [-1, 1]) {
+    const o = new THREE.Mesh(new THREE.BoxGeometry(es, es, es * .5), me);
+    o.position.set(s * c.w * .22, c.h * .68, c.w / 2); g.add(o);
+  }
+  if (c.boss) {
+    const co = new THREE.Mesh(new THREE.BoxGeometry(c.w * .8, .4, c.w * .8), new THREE.MeshLambertMaterial({ color: 0xffd54f }));
+    co.position.y = c.h + .2; g.add(co);
+  }
+  g.position.set(x, y, z);
+  cena.add(g);
+  const m = { tipo, c, g, mat, x, y, z, vy: 0, kx: 0, kz: 0, chao: false, hp: c.hp, cd: 1, flash: 0 };
+  mobs.push(m);
+  return m;
+}
+function removerMob(m) {
+  cena.remove(m.g);
+  const i = mobs.indexOf(m);
+  if (i >= 0) mobs.splice(i, 1);
+}
+function atacar(m) {
+  m.hp -= DANO[swordTier];
+  m.flash = .15;
+  const dx = m.x - p.x, dz = m.z - p.z, d = Math.hypot(dx, dz) || 1;
+  const kb = m.c.boss ? 2 : 7;
+  m.kx = dx / d * kb; m.kz = dz / d * kb;
+  if (!m.c.boss) m.vy = 4;
+  if (m.c.boss) { document.querySelector('#boss .bar div').style.width = Math.max(0, m.hp / m.c.hp * 100) + '%'; }
+  if (m.hp <= 0) {
+    removerMob(m);
+    if (m.c.boss) { stats.boss = 1; bossVivo = null; document.getElementById('boss').style.display = 'none'; }
+    else stats.kills++;
+    atualizarUI(); checarMissoes();
+  }
+}
+function atualizarMob(m, dt) {
+  const c = m.c;
+  const dx = p.x - m.x, dz = p.z - m.z, dist = Math.hypot(dx, dz);
+  const alcance = c.boss ? 80 : 16;
+  let mx = 0, mz = 0;
+  if (dist < alcance && dist > .8) { mx = dx / dist * c.vel; mz = dz / dist * c.vel; }
+  m.kx *= Math.max(0, 1 - 5 * dt); m.kz *= Math.max(0, 1 - 5 * dt);
+  const r = c.w / 2 * .9;
+  m.vy -= 25 * dt;
+  let pular = false;
+  const nx = m.x + (mx + m.kx) * dt;
+  if (!colide(nx, m.y, m.z, r, c.h)) m.x = nx; else pular = true;
+  const nz = m.z + (mz + m.kz) * dt;
+  if (!colide(m.x, m.y, nz, r, c.h)) m.z = nz; else pular = true;
+  const ny = m.y + m.vy * dt;
+  if (!colide(m.x, ny, m.z, r, c.h)) { m.y = ny; m.chao = false; }
+  else { if (m.vy < 0) m.chao = true; m.vy = 0; }
+  if (m.chao && pular) { m.vy = c.salto; m.chao = false; }
+  else if (m.chao && dist < alcance && Math.random() < dt * .8) { m.vy = 6; m.chao = false; }
+  m.g.position.set(m.x, m.y, m.z);
+  m.g.rotation.y = Math.atan2(dx, dz);
+  // dano no jogador
+  m.cd -= dt;
+  if (dist < r + .5 && m.y < p.y + ALT && m.y + c.h > p.y && m.cd <= 0) {
+    danoJogador(c.dano); m.cd = 1;
+  }
+  m.flash -= dt;
+  m.mat.emissive.setHex(m.flash > 0 ? 0xff2222 : 0x000000);
+  if (m.y < -10 || (dist > 48 && !c.boss)) removerMob(m);
+}
+function invocarBoss() {
+  for (let k = 0; k < 60; k++) {
+    const a = rnd(0, 6.283), d = rnd(12, 16);
+    const x = Math.floor(p.x + Math.cos(a) * d), z = Math.floor(p.z + Math.sin(a) * d);
+    if (x < 4 || z < 4 || x > SX - 5 || z > SZ - 5) continue;
+    const y = terr[x + SX * z] + 1;
+    if (!colide(x + .5, y, z + .5, 1.2, 2.5)) {
+      bossVivo = criarMob('rei', x + .5, y, z + .5);
+      document.getElementById('boss').style.display = 'block';
+      document.querySelector('#boss .bar div').style.width = '100%';
+      aviso('👑 O Rei Gosma apareceu! Prepare-se!', 4000);
+      return;
+    }
+  }
+  const x = Math.floor(spawn.x), z = Math.floor(spawn.z);
+  bossVivo = criarMob('rei', x + 4.5, terr[(x + 4) + SX * z] + 1, z + .5);
+  document.getElementById('boss').style.display = 'block';
+}
+let spawnT = 0;
+function tentarSpawn() {
+  if (mobs.filter(m => !m.c.boss).length >= 12) return;
+  const noite = luz < .35;
+  for (let k = 0; k < 25; k++) {
+    const a = rnd(0, 6.283), d = rnd(14, 28);
+    const x = Math.floor(p.x + Math.cos(a) * d), z = Math.floor(p.z + Math.sin(a) * d);
+    if (x < 1 || x >= SX - 1 || z < 1 || z >= SZ - 1) continue;
+    let y;
+    if (Math.random() < .65) y = 2 + Math.floor(Math.random() * Math.max(1, terr[x + SX * z] - 4));
+    else { if (!noite) continue; y = terr[x + SX * z] + 1; }
+    if (!pegar(x, y, z) && !pegar(x, y + 1, z) && pegar(x, y - 1, z)) {
+      criarMob(y < 9 && Math.random() < .5 ? 'sombra' : 'gosma', x + .5, y, z + .5);
+      return;
+    }
+  }
+}
+
+// =====================================================
+// DIA/NOITE E ILUMINAÇÃO
+// =====================================================
+let tempoDia = .25, luz = 1, tempoJogo = 0;
+const COR_DIA = new THREE.Color(0x87ceeb), COR_NOITE = new THREE.Color(0x070b1e), PRETO = new THREE.Color(0x000000);
+const ceu = new THREE.Color();
+function atualizarCeu(dt) {
+  tempoDia += dt / 240;
+  luz = clamp(.5 + .8 * Math.sin(tempoDia * 6.2832), .05, 1);
+  const px = clamp(Math.floor(p.x), 0, SX - 1), pz = clamp(Math.floor(p.z), 0, SZ - 1);
+  const prof = clamp((terr[px + SX * pz] - (p.y + 1.6)) / 6, 0, 1);
+  ceu.copy(COR_NOITE).lerp(COR_DIA, luz).lerp(PRETO, prof);
+  cena.background.copy(ceu);
+  cena.fog.color.copy(ceu);
+  cena.fog.near = lerp(25, 3, prof);
+  cena.fog.far = lerp(60, 26, prof);
+  ambiente.intensity = (.25 + .45 * luz) * (1 - .45 * prof);
+  sol.intensity = (.1 + .5 * luz) * (1 - prof);
+  tocha.intensity = 1.2 * prof + .5 * (1 - luz) * (1 - prof);
+  tocha.position.copy(camera.position);
+}
+
+// =====================================================
+// CONTROLES
+// =====================================================
+const menu = document.getElementById('menu');
+const painel = document.getElementById('painel');
+let painelAberto = false;
+function pedirLock() { if (!painelAberto && !venceu) renderer.domElement.requestPointerLock(); }
+menu.addEventListener('click', pedirLock);
+renderer.domElement.addEventListener('click', pedirLock);
+document.addEventListener('pointerlockchange', () => {
+  if (document.pointerLockElement) menu.style.display = 'none';
+  else {
+    esq = false;
+    for (const k in teclas) teclas[k] = false;
+    if (!painelAberto && !venceu) menu.style.display = 'flex';
+  }
+});
+document.addEventListener('mousemove', e => {
+  if (!document.pointerLockElement) return;
+  yaw -= e.movementX * 0.0022;
+  pitch = clamp(pitch - e.movementY * 0.0022, -1.55, 1.55);
+});
+function montarPainel() {
+  let h = '<h2>🎒 Mochila e Fabricação</h2><div class="cols"><div><h3>Itens</h3>';
+  let algum = false;
+  for (const k in NOMES) if (inv[k] > 0) { h += `<div>${NOMES[k]}: <b>${inv[k]}</b></div>`; algum = true; }
+  if (!algum) h += '<div style="color:#9aa3b2">Vazia</div>';
+  h += `<h3>Equipamento</h3><div>⛏ Picareta: ${TN[pickTier]}</div><div>⚔ Espada: ${TN[swordTier]}</div><div>🛡 Armadura: ${AN[armorTier]}</div>`;
+  h += '</div><div><h3>Receitas</h3>';
+  RECEITAS.forEach(r => {
+    h += `<button class="rec" data-id="${r.id}" ${podeFabricar(r) ? '' : 'disabled'}><b>${r.nome}</b><br><small>${custoTxt(r)}</small></button>`;
+  });
+  h += '</div></div><p style="text-align:center"><button id="voltar">Voltar ao jogo (E)</button></p>';
+  painel.innerHTML = h;
+}
+function abrirPainel() { painelAberto = true; montarPainel(); painel.style.display = 'block'; document.exitPointerLock(); }
+function fecharPainel() { painelAberto = false; painel.style.display = 'none'; renderer.domElement.requestPointerLock(); }
+painel.addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.id === 'voltar') fecharPainel();
+  else if (b.dataset.id) { fabricar(b.dataset.id); montarPainel(); }
+});
+addEventListener('keydown', e => {
+  teclas[e.code] = true;
+  if (e.code === 'KeyE') {
+    if (painelAberto) fecharPainel();
+    else if (document.pointerLockElement) abrirPainel();
+  }
+  if (e.code === 'KeyH' && document.pointerLockElement) {
+    if (inv.pocao > 0 && hp < HPMAX) { inv.pocao--; hp = Math.min(HPMAX, hp + 10); aviso('🧪 Você se curou!', 1500); atualizarUI(); }
+  }
+  const n = parseInt(e.key);
+  if (n >= 1 && n <= HOT.length) selecionar(n);
+});
+addEventListener('keyup', e => { teclas[e.code] = false; });
+addEventListener('wheel', e => { selecionar(selecionado + (e.deltaY > 0 ? 1 : -1)); });
+addEventListener('contextmenu', e => e.preventDefault());
+addEventListener('mousedown', e => {
+  if (!document.pointerLockElement) return;
+  if (e.button === 0) esq = true;
+  else if (e.button === 2) colocar();
+});
+addEventListener('mouseup', e => { if (e.button === 0) esq = false; });
+addEventListener('resize', () => {
+  renderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+});
+
+// =====================================================
+// LOOP
+// =====================================================
+let ultimo = performance.now();
+function loop(agora) {
+  const dt = Math.min((agora - ultimo) / 1000, 0.05);
+  ultimo = agora;
+  const ativo = !!document.pointerLockElement && !venceu;
+  if (ativo) {
+    tempoJogo += dt;
+    mover(dt);
+    p.inv = Math.max(0, p.inv - dt);
+    p.semDano += dt;
+    if (p.semDano > 6 && hp < HPMAX) { hp = Math.min(HPMAX, hp + dt * .5); atualizarUI(); }
+    spawnT += dt;
+    if (spawnT > 1.5) { spawnT = 0; tentarSpawn(); }
+    for (let i = mobs.length - 1; i >= 0; i--) atualizarMob(mobs[i], dt);
+  }
+  camera.position.set(p.x, p.y + 1.6, p.z);
+  camera.rotation.set(pitch, yaw, 0);
+  atualizarCeu(ativo ? dt : 0);
+  mirar();
+  if (ativo) acaoMouse(dt);
+  renderer.render(cena, camera);
+  requestAnimationFrame(loop);
+}
+atualizarUI();
+checarMissoes();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
